@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>4Losta - Колесо Фортуны</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            color: white;
+        }
+        
+        .container {
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+        }
+        
+        .header {
+            margin-bottom: 20px;
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .wheel-container {
+            position: relative;
+            width: 300px;
+            height: 300px;
+            margin: 20px auto;
+        }
+        
+        #wheelCanvas {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .pointer {
+            position: absolute;
+            top: -20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 15px solid transparent;
+            border-right: 15px solid transparent;
+            border-top: 30px solid red;
+            z-index: 10;
+        }
+        
+        .controls {
+            margin: 20px 0;
+        }
+        
+        .spin-button {
+            background: linear-gradient(45deg, #FF416C, #FF4B2B);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(255, 65, 108, 0.4);
+        }
+        
+        .spin-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(255, 65, 108, 0.6);
+        }
+        
+        .spin-button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .result {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+            display: none;
+        }
+        
+        .result.active {
+            display: block;
+            animation: slideIn 0.5s ease-out;
+        }
+        
+        .prize {
+            font-size: 24px;
+            font-weight: bold;
+            margin: 10px 0;
+            color: #FFD700;
+        }
+        
+        .promocode {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 10px;
+            border-radius: 10px;
+            margin: 10px 0;
+            font-family: monospace;
+            font-size: 18px;
+        }
+        
+        .expiry {
+            font-size: 14px;
+            opacity: 0.8;
+            margin-top: 10px;
+        }
+        
+        .rules {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 20px;
+            text-align: left;
+            font-size: 14px;
+        }
+        
+        .rules h3 {
+            margin-bottom: 10px;
+            color: #FFD700;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+        
+        .spinning {
+            animation: spin 0.5s linear infinite;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎰 4LOSTA - КОЛЕСО ФОРТУНЫ 🎰</h1>
+            <p>Колесо нельзя закрыть - крутите обязательно!</p>
+        </div>
+        
+        <div class="wheel-container">
+            <canvas id="wheelCanvas" width="300" height="300"></canvas>
+            <div class="pointer"></div>
+        </div>
+        
+        <div class="controls">
+            <button id="spinButton" class="spin-button">🎡 КРУТИТЬ КОЛЕСО!</button>
+        </div>
+        
+        <div id="result" class="result">
+            <h2>🎉 ПОЗДРАВЛЯЕМ! 🎉</h2>
+            <div class="prize" id="prizeText"></div>
+            <div class="promocode" id="promocodeText" style="display: none;"></div>
+            <div class="expiry" id="expiryText" style="display: none;"></div>
+            <p>Приз автоматически зачислен на ваш счет!</p>
+        </div>
+        
+        <div class="rules">
+            <h3>🎯 Правила игры:</h3>
+            <p>• Колесо имеет 8 секторов с призами</p>
+            <p>• Колесо нельзя закрыть - вы должны его прокрутить!</p>
+            <p>• Все призы зачисляются автоматически</p>
+            <p>• Промокод X100 действует 30 минут</p>
+            <p>• Удачи! 🍀</p>
+        </div>
+    </div>
+
+    <script>
+        // Призы для колеса (8 секторов)
+        const prizes = [
+            "1000р",
+            "500р",
+            "100р",
+            "50р",
+            "100 FS",
+            "10 FS",
+            "1 FS",
+            "X100 К БАЛАНСУ"
+        ];
+        
+        // Цвета для секторов
+        const colors = [
+            '#FF6B6B', '#4ECDC4', '#FFD166', '#06D6A0',
+            '#118AB2', '#073B4C', '#EF476F', '#7209B7'
+        ];
+        
+        // Инициализация Telegram Web App
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+        tg.MainButton.setText("Назад к боту").show().onClick(() => {
+            tg.close();
+        });
+        
+        // Получаем элементы DOM
+        const canvas = document.getElementById('wheelCanvas');
+        const ctx = canvas.getContext('2d');
+        const spinButton = document.getElementById('spinButton');
+        const resultDiv = document.getElementById('result');
+        const prizeText = document.getElementById('prizeText');
+        const promocodeText = document.getElementById('promocodeText');
+        const expiryText = document.getElementById('expiryText');
+        
+        let isSpinning = false;
+        let rotation = 0;
+        let selectedPrize = null;
+        
+        // Рисуем колесо
+        function drawWheel() {
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            const radius = Math.min(centerX, centerY) - 10;
+            const angle = (2 * Math.PI) / prizes.length;
+            
+            // Очищаем canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Сохраняем контекст и вращаем
+            ctx.save();
+            ctx.translate(centerX, centerY);
+            ctx.rotate(rotation * Math.PI / 180);
+            
+            // Рисуем сектора
+            for (let i = 0; i < prizes.length; i++) {
+                const startAngle = i * angle;
+                const endAngle = (i + 1) * angle;
+                
+                // Рисуем сектор
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.arc(0, 0, radius, startAngle, endAngle);
+                ctx.closePath();
+                
+                // Заливаем цветом
+                ctx.fillStyle = colors[i];
+                ctx.fill();
+                
+                // Рисуем границу
+                ctx.strokeStyle = '#FFFFFF';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                
+                // Добавляем текст приза
+                ctx.save();
+                ctx.rotate(startAngle + angle / 2);
+                ctx.translate(radius * 0.6, 0);
+                ctx.rotate(Math.PI / 2);
+                
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = 'bold 12px Arial';
+                ctx.textAlign = 'center';
+                
+                // Разбиваем текст на строки если нужно
+                const prize = prizes[i];
+                if (prize.length > 10) {
+                    const lines = prize.split('\n');
+                    lines.forEach((line, index) => {
+                        ctx.fillText(line, 0, index * 15);
+                    });
+                } else {
+                    ctx.fillText(prize, 0, 0);
+                }
+                
+                ctx.restore();
+            }
+            
+            // Рисуем центр колеса
+            ctx.beginPath();
+            ctx.arc(0, 0, 10, 0, 2 * Math.PI);
+            ctx.fillStyle = '#333333';
+            ctx.fill();
+            ctx.strokeStyle = '#FFFFFF';
+            ctx.stroke();
+            
+            ctx.restore();
+        }
+        
+        // Функция вращения колеса
+        function spinWheel() {
+            if (isSpinning) return;
+            
+            isSpinning = true;
+            spinButton.disabled = true;
+            resultDiv.classList.remove('active');
+            
+            // Выбираем случайный приз
+            const prizeIndex = Math.floor(Math.random() * prizes.length);
+            selectedPrize = prizes[prizeIndex];
+            
+            // Вычисляем нужное вращение (несколько полных оборотов + смещение к выбранному призу)
+            const fullTurns = 5;
+            const sectorAngle = 360 / prizes.length;
+            const targetRotation = fullTurns * 360 + (360 - (prizeIndex * sectorAngle + sectorAngle / 2));
+            
+            // Анимация вращения
+            const startRotation = rotation;
+            const startTime = Date.now();
+            const duration = 3000; // 3 секунды
+            
+            function animate() {
+                const now = Date.now();
+                const progress = Math.min((now - startTime) / duration, 1);
+                
+                // Функция плавного замедления
+                const easeOut = (t) => {
+                    return 1 - Math.pow(1 - t, 3);
+                };
+                
+                rotation = startRotation + easeOut(progress) * (targetRotation - startRotation);
+                
+                drawWheel();
+                
+                if (progress < 1) {
+                    requestAnimationFrame(animate);
+                } else {
+                    // Завершение анимации
+                    isSpinning = false;
+                    rotation = rotation % 360;
+                    showResult(prizeIndex);
+                    spinButton.disabled = false;
+                    
+                    // Отправляем результат в Telegram бот
+                    sendResultToBot(selectedPrize, prizeIndex);
+                }
+            }
+            
+            animate();
+        }
+        
+        // Показываем результат
+        function showResult(prizeIndex) {
+            const prize = prizes[prizeIndex];
+            
+            prizeText.textContent = `Вы выиграли: ${prize}`;
+            resultDiv.classList.add('active');
+            
+            // Если выпал промокод
+            if (prize.includes('X100')) {
+                const promocode = generatePromocode();
+                const expiryTime = new Date(Date.now() + 30 * 60 * 1000);
+                
+                promocodeText.textContent = `Промокод: ${promocode}`;
+                expiryText.textContent = `Действует до: ${expiryTime.toLocaleTimeString('ru-RU', {hour: '2-digit', minute:'2-digit'})}`;
+                
+                promocodeText.style.display = 'block';
+                expiryText.style.display = 'block';
+                
+                // Сохраняем промокод в Telegram Storage
+                tg.CloudStorage.setItem('last_promocode', promocode);
+                tg.CloudStorage.setItem('promocode_expiry', expiryTime.toISOString());
+            } else {
+                promocodeText.style.display = 'none';
+                expiryText.style.display = 'none';
+            }
+            
+            // Прокручиваем к результату
+            resultDiv.scrollIntoView({ behavior: 'smooth' });
+        }
+        
+        // Генерация промокода
+        function generatePromocode() {
+            return `X100_${Math.floor(1000 + Math.random() * 9000)}`;
+        }
+        
+        // Отправка результата в бота
+        function sendResultToBot(prize, prizeIndex) {
+            const data = {
+                prize: prize,
+                prize_index: prizeIndex,
+                user_id: tg.initDataUnsafe.user?.id,
+                timestamp: Date.now()
+            };
+            
+            // Отправляем данные в бота через Telegram Web App
+            tg.sendData(JSON.stringify(data));
+        }
+        
+        // Обработчик нажатия на кнопку
+        spinButton.addEventListener('click', spinWheel);
+        
+        // Инициализация
+        drawWheel();
+        
+        // Блокируем закрытие
+        tg.BackButton.show();
+        tg.BackButton.onClick(() => {
+            tg.showAlert('Вы должны прокрутить колесо перед выходом!');
+        });
+        
+        // Отправляем начальные данные в бота
+        tg.ready();
+    </script>
+</body>
+</html>
